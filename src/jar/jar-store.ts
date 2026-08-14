@@ -1,9 +1,15 @@
+export type JarModes = {
+  file: number;
+  dir: number;
+};
+
 export type JarStore = {
   read: (path: string) => Promise<string | null>;
   writeAtomic: (path: string, contents: string) => Promise<void>;
   exists: (path: string) => Promise<boolean>;
   remove: (path: string) => Promise<void>;
   list: (dir: string) => Promise<string[]>;
+  modes: () => JarModes;
 };
 
 const JAR_FILE_MODE = 0o600;
@@ -48,5 +54,7 @@ export const createFsJarStore = (): JarStore => {
     return names;
   };
 
-  return { read, writeAtomic, exists, remove, list };
+  const modes = (): JarModes => ({ file: JAR_FILE_MODE, dir: JAR_DIR_MODE });
+
+  return { read, writeAtomic, exists, remove, list, modes };
 };

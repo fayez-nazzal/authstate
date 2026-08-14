@@ -48,6 +48,7 @@ const fakeJarStore = (contents: string | null): { store: JarStore; writes: numbe
     exists: async () => contents !== null,
     remove: async () => {},
     list: async () => [],
+    modes: () => ({ file: 0o600, dir: 0o700 }),
   };
   return { store, writes: state.writes };
 };

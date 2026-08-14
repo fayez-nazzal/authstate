@@ -18,6 +18,7 @@ import { createFsLockHolder, createSystemClock } from "@login-turn/lock-holder";
 import { createFsJarStore } from "@jar/jar-store";
 import { runEnsure } from "@ensure/ensure-run";
 import type { EnsureWorld } from "@ensure/ensure-run";
+import { pruneJars, revokeJar } from "@jar/lifecycle";
 
 export const VERSION = "0.2.0";
 
@@ -25,16 +26,26 @@ const HELP = `authstate ${VERSION} — the only thing that logs in, one jar per 
 
 USAGE
   authstate ensure --credentials <yaml> [--purpose <name>]
+  authstate login  --credentials <yaml> [--purpose <name>] --headed
   authstate path   --credentials <yaml> [--purpose <name>]
+  authstate revoke --credentials <yaml> [--purpose <name>]
+  authstate prune  --credentials <yaml>
 
   ensure guarantees a valid Playwright storageState jar for one account and
   prints its path on stdout. A jar the expiry maths has not proven dead is
-  reused without opening a browser. Missing, expired or rejected state
-  triggers exactly one scripted login. Parallel callers collapse into one
-  login through a per jar lockfile.
+  reused without opening a browser. Missing or expired state triggers
+  exactly one headless scripted login. An entry with no password needs a
+  human and refuses instead, pointing at "authstate login --headed".
+  Parallel callers collapse into one login through a per jar lockfile.
+
+  login always opens a browser and performs one scripted or human-assisted
+  login, headed by default, and writes the resulting jar.
 
   path prints where that jar lives without touching the network, so a tool
   can resolve the jar before deciding to do anything.
+
+  revoke deletes one account's jar and lock. prune deletes every jar under
+  an app's credentials file that the expiry maths already proves dead.
 
 OPTIONS
   --credentials <path>  .testing-credentials.yaml (schema: optional app name,
@@ -47,8 +58,7 @@ OPTIONS
   --force               skip the freshness check and re-login now
   --verify              also open a browser to confirm a jar the expiry
                         maths already calls fresh, instead of trusting it
-  --headed              visible browser window, for an account whose login a
-                        human must complete by hand (MFA, SSO)
+  --headed              visible browser window. Valid only on the login command
   --timeout <ms>        per step timeout (default 20000)
   -h, --help            this help
 
@@ -133,17 +143,25 @@ const runEnsureCommand = async (
   statePath: string,
   values: Record<string, unknown>,
   timeoutMs: number,
+  headed: boolean,
+  forceLogin: boolean,
 ): Promise<never> => {
+  if (!headed && !entry.password) {
+    fail(
+      `entry "${entryName}" has no password and needs a human, run: authstate login --headed`,
+      ExitCode.humanStepRequired,
+    );
+  }
   const world = buildWorld();
   const result = await runEnsure(world, {
-    request: { force: values.force as boolean, verify: values.verify as boolean },
+    request: { force: forceLogin || (values.force as boolean), verify: values.verify as boolean },
     entry,
     entryName,
     app: appKey,
     namespace,
     statePath,
     lockDir: `${statePath}.lock`,
-    headed: values.headed as boolean,
+    headed,
     timeoutMs,
     lockWaitMs: LOCK_WAIT_MS,
     version: VERSION,
@@ -151,6 +169,20 @@ const runEnsureCommand = async (
   writeHumanReport(result);
   writeResultLine(result);
   process.exit(result.exit_code);
+};
+
+const runRevokeCommand = async (statePath: string): Promise<never> => {
+  const jarStore = createFsJarStore();
+  await revokeJar(jarStore, statePath);
+  log(`revoked ${statePath}`);
+  process.exit(ExitCode.usable);
+};
+
+const runPruneCommand = async (statePath: string): Promise<never> => {
+  const jarStore = createFsJarStore();
+  const pruned = await pruneJars(jarStore, dirname(statePath), Date.now());
+  log(`pruned ${pruned.length} jar(s): ${pruned.join(", ")}`);
+  process.exit(ExitCode.usable);
 };
 
 export const main = async () => {
@@ -171,13 +203,16 @@ export const main = async () => {
   });
 
   const command = positionals[0];
-  const knownCommand = command === "ensure" || command === "path";
+  const knownCommand = command === "ensure" || command === "path" || command === "login" || command === "revoke" || command === "prune";
   if (values.help || !knownCommand) {
     console.log(HELP);
     process.exit(values.help ? 0 : ExitCode.usageError);
   }
   if (values.out) {
     fail("--out was removed, use --namespace for a second session on one account", ExitCode.usageError);
+  }
+  if (values.headed && command !== "login") {
+    fail("--headed is only valid on `authstate login`", ExitCode.usageError);
   }
   if (!values.credentials) {
     fail("--credentials is required", ExitCode.usageError);
@@ -203,8 +238,15 @@ export const main = async () => {
   if (command === "path") {
     runPathCommand(appKey, resolved.name, namespace, statePath);
   }
+  if (command === "revoke") {
+    await runRevokeCommand(statePath);
+  }
+  if (command === "prune") {
+    await runPruneCommand(statePath);
+  }
 
-  await runEnsureCommand(appKey, resolved.name, resolved.entry, namespace, statePath, values, timeoutMs);
+  const headed = command === "login";
+  await runEnsureCommand(appKey, resolved.name, resolved.entry, namespace, statePath, values, timeoutMs, headed, headed);
 };
 
 if (import.meta.main) {
