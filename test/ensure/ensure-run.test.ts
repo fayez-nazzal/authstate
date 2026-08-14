@@ -145,3 +145,71 @@ test("a lock that never terminates ends at the deadline with exit 5", async () =
   expect(result.exit_code).toBe(5);
   expect(result.reason).toBe("lock-timeout");
 });
+
+test("an unreachable app url during verify refuses with browser-unavailable and exits 7", async () => {
+  const oneHourFromNow = Math.floor(Date.now() / 1000) + 3600;
+  const jar = fakeJarStore(JSON.stringify({ cookies: [{ name: "s", expires: oneHourFromNow }], origins: [] }));
+  let writeAtomicCalls = 0;
+  jar.store.writeAtomic = async () => {
+    writeAtomicCalls += 1;
+  };
+  const session: BrowserSession = {
+    open: async () => {},
+    run: async () => {
+      throw new Error("page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/");
+    },
+    executeLogin: async () => {},
+    observe: async () => {
+      throw new Error("must never observe after a failed navigation");
+    },
+    captureStorageState: async () => {
+      throw new Error("must never capture after a failed navigation");
+    },
+    close: async () => {},
+    channel: () => "chrome",
+  };
+  const world: EnsureWorld = {
+    jarStore: jar.store,
+    lockHolder: fakeLockHolder(),
+    clock: fakeClock(),
+    openBrowserSession: () => session,
+  };
+  const verifyInput: EnsureInput = { ...baseInput, request: { force: false, verify: true } };
+  const result = await runEnsure(world, verifyInput);
+
+  expect(result.exit_code).toBe(7);
+  expect(result.status).toBe("refused");
+  expect(result.reason).toBe("browser-unavailable");
+  expect(result.ok).toBe(false);
+  expect(result.browser_launched).toBe(true);
+  expect(writeAtomicCalls).toBe(0);
+});
+
+test("a browser that cannot launch during login refuses with browser-unavailable and exits 7", async () => {
+  const jar = fakeJarStore(null);
+  const session: BrowserSession = {
+    open: async () => {
+      throw new Error("browserType.launch: Executable does not exist");
+    },
+    run: async () => {},
+    executeLogin: async () => {},
+    observe: async () => {
+      throw new Error("never reached");
+    },
+    captureStorageState: async () => "",
+    close: async () => {},
+    channel: () => "chrome",
+  };
+  const world: EnsureWorld = {
+    jarStore: jar.store,
+    lockHolder: fakeLockHolder(),
+    clock: fakeClock(),
+    openBrowserSession: () => session,
+  };
+  const result = await runEnsure(world, baseInput);
+
+  expect(result.exit_code).toBe(7);
+  expect(result.status).toBe("refused");
+  expect(result.reason).toBe("browser-unavailable");
+  expect(result.ok).toBe(false);
+});

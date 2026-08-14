@@ -105,12 +105,14 @@ some-browser-tool --storage-state "$STATE"
 | 6 | human step required |
 | 7 | tool could not run |
 
+A browser that cannot start, or an `app_url` with nothing listening, is a `browser-unavailable` refusal. It still prints one JSON line and exits `7`.
+
 ## JSON output
 
 `ensure`, `login` and `path` print one JSON line on stdout. Progress and errors go to stderr, so stdout stays clean.
 
 ```json
-{"tool":"authstate","version":"0.2.0","command":"path","ok":true,"status":"reused","reason":null,"app":"example-app","account":"basic-user","namespace":null,"path":"/Users/you/.authstate/example-app--basic-user.json","expires_at":null,"seconds_remaining":null,"expiry_source":"none","logged_in":null,"proof":null,"verified":false,"browser_launched":false,"exit_code":0}
+{"tool":"authstate","version":"0.2.1","command":"path","ok":true,"status":"reused","reason":null,"app":"example-app","account":"basic-user","namespace":null,"path":"/Users/you/.authstate/example-app--basic-user.json","expires_at":null,"seconds_remaining":null,"expiry_source":"none","logged_in":null,"proof":null,"verified":false,"browser_launched":false,"exit_code":0}
 ```
 
 - `version` tracks the `version` field in `package.json`.

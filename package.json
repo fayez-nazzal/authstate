@@ -1,6 +1,6 @@
 {
   "name": "authstate",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Log in once and maintain a shared Playwright storageState cookie jar for browser tools.",
   "type": "module",
   "bin": {

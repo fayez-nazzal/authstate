@@ -86,6 +86,15 @@ const outcomeForFailedLogin = (
   return outcome;
 };
 
+const browserUnavailableOutcome = (result: Result, launched: boolean): Result => ({
+  ...result,
+  reason: "browser-unavailable",
+  logged_in: null,
+  proof: null,
+  browser_launched: launched,
+  exit_code: ExitCode.toolCouldNotRun,
+});
+
 const runLoginFlow = async (
   world: EnsureWorld,
   input: EnsureInput,
@@ -94,8 +103,10 @@ const runLoginFlow = async (
 ): Promise<Result> => {
   const session = world.openBrowserSession(input.headed);
   let outcome = { ...result };
+  let launched = false;
   try {
     await session.open();
+    launched = true;
     await session.executeLogin(planLogin(input.entry), input.timeoutMs);
     const observation = await session.observe(assertion, input.timeoutMs);
     const proof = proofFromObservation(observation);
@@ -116,6 +127,8 @@ const runLoginFlow = async (
     } else {
       outcome = { ...result, browser_launched: true, ...outcomeForFailedLogin(observation) };
     }
+  } catch {
+    outcome = browserUnavailableOutcome(result, launched);
   } finally {
     await session.close();
   }
@@ -130,8 +143,10 @@ const runVerifyFlow = async (
 ): Promise<Result> => {
   const session = world.openBrowserSession(input.headed);
   let outcome: Result;
+  let launched = false;
   try {
     await session.open(input.statePath);
+    launched = true;
     await session.run(async (page) => {
       await page.goto(input.entry.app_url, { waitUntil: "load", timeout: input.timeoutMs });
     });
@@ -154,6 +169,8 @@ const runVerifyFlow = async (
     } else {
       outcome = await runLoginFlow(world, input, assertion, result);
     }
+  } catch {
+    outcome = browserUnavailableOutcome(result, launched);
   } finally {
     await session.close();
   }
