@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 import { parseArgs } from "node:util";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
 import type { Page } from "playwright";
@@ -19,6 +19,10 @@ import { parseCredentialsFile } from "@account/credentials-file";
 import { resolveEntry } from "@account/entry-resolution";
 import { parseSignedInWhen } from "@signin-proof/assertion";
 import { acquireLockTurn, createFsLockHolder, createSystemClock } from "@login-turn/lock-holder";
+import { parseJarContents } from "@jar/jar-contents";
+import { earliestCookieExpiryMs } from "@freshness/cookie-expiry";
+import { earliestTokenExpiryMs } from "@freshness/token-expiry";
+import { decideFreshness } from "@freshness/freshness-verdict";
 
 export { normalizeAppKey, resolveAppKey } from "@account/app-key";
 export { canonicalJarPath, jarFileName } from "@jar/jar-path";
@@ -56,7 +60,9 @@ OPTIONS
                         path ~/.authstate/<app>--<purpose>.json
   --namespace <name>    extra key segment for a second, separate session on the
                         same account
-  --force               skip the validity probe and re-login now
+  --force               skip the freshness check and re-login now
+  --verify              also open a browser to confirm a jar the expiry
+                        maths already calls fresh, instead of trusting it
   --headed              visible browser window, for an account whose login a
                         human must complete by hand (MFA, SSO)
   --timeout <ms>        per step timeout (default 20000)
@@ -108,6 +114,14 @@ const acquireLock = async (lockDir: string): Promise<boolean> => {
 
 const releaseLock = async (lockDir: string) => {
   await lockHolder.remove(lockDir);
+};
+
+const isJarFresh = (statePath: string): boolean => {
+  const contents = parseJarContents(readFileSync(statePath, "utf8"));
+  const cookieMs = earliestCookieExpiryMs(contents.cookies);
+  const tokenMs = earliestTokenExpiryMs(contents.originTokens);
+  const verdict = decideFreshness(cookieMs, tokenMs, Date.now());
+  return verdict.verdict === "not-proven-dead";
 };
 
 const assertionFor = (entry: CredentialsEntry, entryName: string): SignInAssertion => {
@@ -200,6 +214,7 @@ const main = async () => {
       out: { type: "string" },
       namespace: { type: "string" },
       force: { type: "boolean", default: false },
+      verify: { type: "boolean", default: false },
       headed: { type: "boolean", default: false },
       timeout: { type: "string", default: "20000" },
       help: { type: "boolean", short: "h", default: false },
@@ -281,13 +296,20 @@ const main = async () => {
   try {
     let needLogin = true;
     if (!values.force && existsSync(statePath)) {
-      log(`probing existing state ${statePath}`);
-      const valid = await probeState(statePath, entry, resolved.name, values.headed as boolean, timeoutMs);
-      if (valid) {
-        log("state is valid, reusing");
+      const fresh = isJarFresh(statePath);
+      if (fresh) {
+        log("expiry maths says the jar is not proven dead, reusing without a browser");
         needLogin = false;
       } else {
-        log("state is stale");
+        log("jar is expired or unreadable, logging in again");
+      }
+      if (fresh && values.verify) {
+        log(`--verify given, probing existing state ${statePath}`);
+        const valid = await probeState(statePath, entry, resolved.name, values.headed as boolean, timeoutMs);
+        needLogin = !valid;
+        if (!valid) {
+          log("verification probe found the state stale");
+        }
       }
     }
     if (needLogin) {
