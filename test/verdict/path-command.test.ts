@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { join } from "node:path";
 
-const fixture = join(import.meta.dir, "..", "fixtures", "example-app", ".testing-credentials.yaml");
+const fixture = join(import.meta.dir, "..", "fixtures", "example-app", ".testing-credentials.example.yaml");
 
 test("authstate path writes exactly one parseable stdout line and nothing else", async () => {
   const proc = Bun.spawn({
