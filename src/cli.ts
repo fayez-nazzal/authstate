@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 import { parseArgs } from "node:util";
-import { existsSync, mkdirSync, readFileSync, rmdirSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, rmdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
 import type { Page } from "playwright";
@@ -15,6 +15,8 @@ import { ExitCode } from "@verdict/exit-code";
 import { writeResultLine } from "@verdict/result";
 import type { Result } from "@verdict/result";
 import { writeHumanReport } from "@verdict/human-report";
+import { parseCredentialsFile } from "@account/credentials-file";
+import { resolveEntry } from "@account/entry-resolution";
 
 export { normalizeAppKey, resolveAppKey } from "@account/app-key";
 export { canonicalJarPath, jarFileName } from "@jar/jar-path";
@@ -79,29 +81,14 @@ const fail = (message: string, code: number): never => {
   process.exit(code);
 };
 
-const resolveEntry = (file: CredentialsFile, purpose: string | undefined): { name: string; entry: CredentialsEntry } => {
-  let entryName = file.default;
-  if (purpose) {
-    entryName = undefined;
-    if (file.credentials[purpose]) {
-      entryName = purpose;
-    } else {
-      for (const [name, entry] of Object.entries(file.credentials)) {
-        const purposeText = entry.purpose || "";
-        if (purposeText.toLowerCase().includes(purpose.toLowerCase())) {
-          entryName = name;
-          break;
-        }
-      }
-    }
+const resolveEntryOrFail = (file: CredentialsFile, purpose: string | undefined): { name: string; entry: CredentialsEntry } => {
+  const resolution = resolveEntry(file, purpose);
+  if (!resolution.ok) {
+    fail(resolution.reason, ExitCode.entryNotFound);
   }
-  if (!entryName || !file.credentials[entryName]) {
-    fail(`no credentials entry matches "${purpose || "(default)"}"`, 2);
-  }
-  const name = entryName as string;
-  const entry = file.credentials[name];
-  log(`using credentials entry "${name}" (${entry.email} @ ${entry.app_url})`);
-  return { name, entry };
+  const resolved = resolution as { ok: true; name: string; entry: CredentialsEntry };
+  log(`using credentials entry "${resolved.name}" (${resolved.entry.email} @ ${resolved.entry.app_url})`);
+  return { name: resolved.name, entry: resolved.entry };
 };
 
 const LOCK_STALE_MS = 180000;
@@ -252,11 +239,15 @@ const main = async () => {
   const credentialsPath = resolve(expandHome(values.credentials as string));
   const timeoutMs = Number(values.timeout);
   if (!existsSync(credentialsPath)) {
-    fail(`credentials file not found: ${credentialsPath}`, 2);
+    fail(`credentials file not found: ${credentialsPath}`, ExitCode.credentialsFileInvalid);
   }
 
-  const file = Bun.YAML.parse(readFileSync(credentialsPath, "utf8")) as CredentialsFile;
-  const resolved = resolveEntry(file, values.purpose);
+  const parsed = parseCredentialsFile(credentialsPath);
+  if (!parsed.ok) {
+    fail(parsed.reason, ExitCode.credentialsFileInvalid);
+  }
+  const file = (parsed as { ok: true; file: CredentialsFile }).file;
+  const resolved = resolveEntryOrFail(file, values.purpose);
   const entry = resolved.entry;
 
   let statePath: string;
