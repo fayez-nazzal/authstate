@@ -1,11 +1,8 @@
 # authstate
 
-`authstate` logs in to a web app once and keeps the browser session on disk as a
-Playwright `storageState` file. Other browser tools read that file instead of
-handling passwords themselves.
+`authstate` logs in to a web app once and keeps the browser session on disk as a Playwright `storageState` file, so other tools never handle passwords.
 
-Each account gets its own file, called a jar. Tools that share an account share
-one login. Tools on different accounts never block each other.
+Each account gets its own file, called a jar. Tools that share an account share one login. Tools on different accounts never block each other.
 
 ## Requirements
 
@@ -18,6 +15,8 @@ one login. Tools on different accounts never block each other.
 bun install
 bun link
 ```
+
+There is no build step. The `authstate` command runs `src/main.ts` straight from source.
 
 ## Configure
 
@@ -42,77 +41,56 @@ credentials:
       url_matches: "http://localhost:3000/dashboard/**"
 ```
 
-- `app` names the jar. It defaults to the folder holding the file.
+- `app` names the jar. It falls back to the folder holding the file.
 - `default` picks the entry used when no `--purpose` is passed.
 - `purpose` is free text. `--purpose` matches an entry key or any part of it.
+- `email`, `password` and `app_url` are required on every entry.
+- `signed_in_when` needs `url_matches`, or `selector`, or both. Without it a login refuses with exit code `3`.
 
-## Daily use
-
-Make sure a valid jar exists and print its path.
+## The smallest useful command
 
 ```bash
 authstate ensure --credentials .testing-credentials.yaml
 ```
 
-Pick a different account.
+That makes sure a valid jar exists and prints one JSON line on stdout.
+
+## Commands
+
+- `ensure` reuses a jar the expiry maths has not proven dead, else runs one headless login.
+- `login` always opens a visible browser and writes the resulting jar. Use it when the account needs a code or a single sign on step.
+- `path` prints where the jar lives without touching the network.
+- `revoke` deletes one account's jar and its lock.
+- `prune` deletes every dead jar in `~/.authstate/`.
 
 ```bash
 authstate ensure --credentials .testing-credentials.yaml --purpose premium-user
-```
-
-Print the jar path without touching the network.
-
-```bash
-authstate path --credentials .testing-credentials.yaml
-```
-
-Log in again from scratch.
-
-```bash
 authstate ensure --credentials .testing-credentials.yaml --force
-```
-
-Watch the login in a real window, for an account that needs a code or a single
-sign on step. This is the only command that opens a visible browser.
-
-```bash
-authstate login --credentials .testing-credentials.yaml --headed
-```
-
-Delete one account's jar and lock.
-
-```bash
+authstate login  --credentials .testing-credentials.yaml --headed
+authstate path   --credentials .testing-credentials.yaml
 authstate revoke --credentials .testing-credentials.yaml --purpose premium-user
+authstate prune  --credentials .testing-credentials.yaml
 ```
 
-Delete every jar under a credentials file that the expiry maths already
-proves dead.
+Feed the jar path into another tool. The `path` field of the JSON line carries it.
 
 ```bash
-authstate prune --credentials .testing-credentials.yaml
-```
-
-Feed the path straight into another tool.
-
-```bash
-STATE=$(authstate path --credentials .testing-credentials.yaml)
+STATE=$(authstate path --credentials .testing-credentials.yaml | jq -r .path)
 some-browser-tool --storage-state "$STATE"
 ```
 
-## Options
+## Flags
 
 - `--credentials <path>` the credentials file. Required.
 - `--purpose <name>` which entry to use.
 - `--namespace <name>` a second separate session on the same account.
 - `--force` skip the freshness check and log in now.
-- `--verify` open a browser to confirm a jar the expiry maths already calls
-  fresh, instead of trusting it.
-- `--headed` show the browser window. Valid only on `authstate login`.
+- `--verify` open a browser to confirm a jar the expiry maths already calls fresh.
+- `--headed` accepted only on `authstate login`. That command opens a window anyway.
 - `--timeout <ms>` per step timeout. Default `20000`.
+- `-h`, `--help` print the help text and exit `0`.
 
-`--out` was removed. It let a live bearer credential land anywhere and broke
-the one-jar-per-account rule; use `--namespace` for a second session on the
-same account instead.
+`--out` was removed. It let a live credential land anywhere and broke the one-jar-per-account rule. Passing it now fails with exit code `2`. Use `--namespace` instead.
 
 ## Exit codes
 
@@ -127,19 +105,34 @@ same account instead.
 | 6 | human step required |
 | 7 | tool could not run |
 
-Each entry in the credentials file needs a `signed_in_when` block naming a
-`url_matches` glob and/or a `selector` that only appears once actually signed
-in. Without it `ensure` refuses with exit `3` and names the entry, instead of
-guessing from page content.
+## JSON output
+
+`ensure`, `login` and `path` print one JSON line on stdout. Progress and errors go to stderr, so stdout stays clean.
+
+```json
+{"tool":"authstate","version":"0.2.0","command":"path","ok":true,"status":"reused","reason":null,"app":"example-app","account":"basic-user","namespace":null,"path":"/Users/you/.authstate/example-app--basic-user.json","expires_at":null,"seconds_remaining":null,"expiry_source":"none","logged_in":null,"proof":null,"verified":false,"browser_launched":false,"exit_code":0}
+```
+
+- `version` tracks the `version` field in `package.json`.
+- `status` is one of `reused`, `refreshed`, `logged-in`, `refused`.
+- `expiry_source` is one of `cookie`, `token`, `both`, `none`.
+- `proof` is `assertion`, `not-proven-dead`, or `null`.
+- `reason` is `null` when things went well, else a short reason code.
+
+## Design notes
+
+- Jars live in `~/.authstate/`, outside any repository.
+- A jar file is named `<app>--<account>.json`, plus `--<namespace>` when set.
+- Parallel callers collapse into one login through a lock folder beside the jar.
+- An entry with no password refuses instead of guessing, and points at `authstate login --headed`.
+- Freshness comes from cookie and token expiry maths, so the common case opens no browser.
 
 ## Security
 
 - Your credentials file and your jars are local files. Never commit them.
 - A jar holds live cookies and tokens. Treat it like a password.
-- Jars live in `~/.authstate/` by default, outside any repository.
 - The bundled `.gitignore` already blocks credential and state files.
-- If a jar or a credentials file ever leaks, change the password and sign the
-  account out everywhere.
+- If a jar or a credentials file ever leaks, change the password and sign the account out everywhere.
 
 ## Tests
 

@@ -1,4 +1,5 @@
 import { ExitCode } from "@verdict/exit-code";
+import packageJson from "../../package.json";
 
 export const EXIT_TABLE: Array<{ code: number; meaning: string }> = [
   { code: ExitCode.usable, meaning: "usable" },
@@ -13,7 +14,7 @@ export const EXIT_TABLE: Array<{ code: number; meaning: string }> = [
 
 const exitTableLine = () => EXIT_TABLE.map((row) => `${row.code} ${row.meaning}`).join(" · ");
 
-export const VERSION = "0.2.0";
+export const VERSION = packageJson.version;
 
 export const HELP_TEXT = `authstate ${VERSION} — the only thing that logs in, one jar per account
 
