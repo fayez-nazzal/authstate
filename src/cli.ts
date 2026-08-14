@@ -11,6 +11,10 @@ import type { CredentialsEntry, CredentialsFile } from "@account/app-key";
 import { createPlaywrightBrowserSession } from "@login/browser-session";
 import type { SignInAssertion } from "@login/browser-session";
 import { proofFromObservation } from "@signin-proof/proof";
+import { ExitCode } from "@verdict/exit-code";
+import { writeResultLine } from "@verdict/result";
+import type { Result } from "@verdict/result";
+import { writeHumanReport } from "@verdict/human-report";
 
 export { normalizeAppKey, resolveAppKey } from "@account/app-key";
 export { canonicalJarPath, jarFileName } from "@jar/jar-path";
@@ -265,8 +269,30 @@ const main = async () => {
   mkdirSync(dirname(statePath), { recursive: true });
 
   if (command === "path") {
-    console.log(statePath);
-    process.exit(0);
+    const appKey = resolveAppKey(file, credentialsPath);
+    const result: Result = {
+      tool: "authstate",
+      version: VERSION,
+      command: "path",
+      ok: true,
+      status: "reused",
+      reason: null,
+      app: appKey,
+      account: resolved.name,
+      namespace: (values.namespace as string | undefined) || null,
+      path: statePath,
+      expires_at: null,
+      seconds_remaining: null,
+      expiry_source: "none",
+      logged_in: null,
+      proof: null,
+      verified: false,
+      browser_launched: false,
+      exit_code: ExitCode.usable,
+    };
+    writeHumanReport(result);
+    writeResultLine(result);
+    process.exit(ExitCode.usable);
   }
 
   const lockDir = `${statePath}.lock`;
