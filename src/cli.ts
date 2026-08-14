@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 import { parseArgs } from "node:util";
-import { existsSync, mkdirSync, rmdirSync, statSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
 import type { Page } from "playwright";
@@ -18,6 +18,7 @@ import { writeHumanReport } from "@verdict/human-report";
 import { parseCredentialsFile } from "@account/credentials-file";
 import { resolveEntry } from "@account/entry-resolution";
 import { parseSignedInWhen } from "@signin-proof/assertion";
+import { acquireLockTurn, createFsLockHolder, createSystemClock } from "@login-turn/lock-holder";
 
 export { normalizeAppKey, resolveAppKey } from "@account/app-key";
 export { canonicalJarPath, jarFileName } from "@jar/jar-path";
@@ -92,44 +93,21 @@ const resolveEntryOrFail = (file: CredentialsFile, purpose: string | undefined):
   return { name: resolved.name, entry: resolved.entry };
 };
 
-const LOCK_STALE_MS = 180000;
 const LOCK_WAIT_MS = 150000;
 
+const lockHolder = createFsLockHolder();
+const systemClock = createSystemClock();
+
 const acquireLock = async (lockDir: string): Promise<boolean> => {
-  const started = Date.now();
-  let acquired = false;
-  while (!acquired) {
-    try {
-      mkdirSync(lockDir);
-      acquired = true;
-    } catch {
-      let lockAge = 0;
-      try {
-        lockAge = Date.now() - statSync(lockDir).mtimeMs;
-      } catch {
-        continue;
-      }
-      if (lockAge > LOCK_STALE_MS) {
-        log("removing stale lock");
-        try {
-          rmdirSync(lockDir);
-        } catch {}
-        continue;
-      }
-      if (Date.now() - started > LOCK_WAIT_MS) {
-        return false;
-      }
-      log("another authstate is logging in, waiting…");
-      await Bun.sleep(2000);
-    }
+  const outcome = await acquireLockTurn(lockHolder, systemClock, lockDir, LOCK_WAIT_MS);
+  if (outcome === "timed-out") {
+    log("timed out waiting for another authstate login");
   }
-  return true;
+  return outcome === "acquired";
 };
 
-const releaseLock = (lockDir: string) => {
-  try {
-    rmdirSync(lockDir);
-  } catch {}
+const releaseLock = async (lockDir: string) => {
+  await lockHolder.remove(lockDir);
 };
 
 const assertionFor = (entry: CredentialsEntry, entryName: string): SignInAssertion => {
@@ -296,7 +274,7 @@ const main = async () => {
   const lockDir = `${statePath}.lock`;
   const lockAcquired = await acquireLock(lockDir);
   if (!lockAcquired) {
-    fail("timed out waiting for another authstate login", 1);
+    fail("timed out waiting for another authstate login", ExitCode.lockTimeout);
   }
 
   let exitCode = 0;
@@ -319,7 +297,7 @@ const main = async () => {
       }
     }
   } finally {
-    releaseLock(lockDir);
+    await releaseLock(lockDir);
   }
   if (exitCode === 0) {
     console.log(statePath);
