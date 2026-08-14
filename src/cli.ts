@@ -1,14 +1,16 @@
 #!/usr/bin/env bun
 
 import { parseArgs } from "node:util";
-import { existsSync, mkdirSync, readFileSync, renameSync, rmdirSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
-import { chromium } from "playwright";
-import type { Browser, BrowserContext, Page } from "playwright";
+import type { Page } from "playwright";
 import { normalizeAppKey, resolveAppKey } from "@account/app-key";
 import { canonicalJarPath, jarFileName } from "@jar/jar-path";
 import type { CredentialsEntry, CredentialsFile } from "@account/app-key";
+import { createPlaywrightBrowserSession } from "@login/browser-session";
+import type { SignInAssertion } from "@login/browser-session";
+import { proofFromObservation } from "@signin-proof/proof";
 
 export { normalizeAppKey, resolveAppKey } from "@account/app-key";
 export { canonicalJarPath, jarFileName } from "@jar/jar-path";
@@ -138,76 +140,14 @@ const releaseLock = (lockDir: string) => {
   } catch {}
 };
 
-const launchBrowser = async (headed: boolean): Promise<Browser> => {
-  let browser: Browser;
-  try {
-    browser = await chromium.launch({ channel: "chrome", headless: !headed });
-  } catch {
-    log("Chrome unavailable, falling back to bundled Chromium");
-    browser = await chromium.launch({ headless: !headed });
+const assertionFor = (entry: CredentialsEntry): SignInAssertion => {
+  let assertion: SignInAssertion;
+  if (entry.signed_in_when) {
+    assertion = { urlMatches: entry.signed_in_when.url_matches, selector: entry.signed_in_when.selector };
+  } else {
+    assertion = { urlMatches: `${new URL(entry.app_url).origin}/**` };
   }
-  return browser;
-};
-
-const passwordFieldCount = async (page: Page): Promise<number> => {
-  let count = 0;
-  try {
-    count = await page.locator("input[type='password']:visible").count();
-  } catch {}
-  return count;
-};
-
-const looksLoggedIn = async (page: Page, appOrigin: string, timeoutMs: number): Promise<boolean> => {
-  const deadline = Date.now() + timeoutMs;
-  let verdict = false;
-  let settled = false;
-  while (!settled && Date.now() < deadline) {
-    const passwordFields = await passwordFieldCount(page);
-    const currentOrigin = new URL(page.url()).origin;
-    if (passwordFields > 0) {
-      verdict = false;
-      settled = true;
-    } else if (currentOrigin === appOrigin) {
-      const bodyText = await page.evaluate(() => document.body.innerText.trim().length).catch(() => 0);
-      if (bodyText > 0) {
-        verdict = true;
-        settled = true;
-      }
-    }
-    if (!settled) {
-      await Bun.sleep(500);
-    }
-  }
-  return verdict;
-};
-
-const saveStateAtomic = async (context: BrowserContext, statePath: string) => {
-  const temp = `${statePath}.tmp-${process.pid}`;
-  await context.storageState({ path: temp });
-  renameSync(temp, statePath);
-};
-
-const probeState = async (statePath: string, entry: CredentialsEntry, headed: boolean, timeoutMs: number): Promise<boolean> => {
-  let valid = false;
-  const browser = await launchBrowser(headed);
-  try {
-    const context = await browser.newContext({ storageState: statePath });
-    const page = await context.newPage();
-    await page.goto(entry.app_url, { waitUntil: "load", timeout: timeoutMs });
-    const appOrigin = new URL(entry.app_url).origin;
-    valid = await looksLoggedIn(page, appOrigin, Math.min(timeoutMs, 10000));
-    if (valid) {
-      await page.waitForLoadState("networkidle", { timeout: 5000 }).catch(() => {});
-      await saveStateAtomic(context, statePath);
-      log("captured rotated tokens back into the jar");
-    }
-  } catch (error) {
-    log(`probe errored, treating state as stale (${error})`);
-    valid = false;
-  } finally {
-    await browser.close();
-  }
-  return valid;
+  return assertion;
 };
 
 const fillLoginForm = async (page: Page, entry: CredentialsEntry, timeoutMs: number) => {
@@ -228,21 +168,44 @@ const fillLoginForm = async (page: Page, entry: CredentialsEntry, timeoutMs: num
   await submit.click();
 };
 
+const probeState = async (statePath: string, entry: CredentialsEntry, headed: boolean, timeoutMs: number): Promise<boolean> => {
+  let valid = false;
+  const session = createPlaywrightBrowserSession(headed);
+  try {
+    await session.open(statePath);
+    await session.run(async (page) => {
+      await page.goto(entry.app_url, { waitUntil: "load", timeout: timeoutMs });
+    });
+    const observation = await session.observe(assertionFor(entry), Math.min(timeoutMs, 10000));
+    valid = proofFromObservation(observation) === "signed-in";
+    if (valid) {
+      await session.capture(statePath);
+      log("captured rotated tokens back into the jar");
+    }
+  } catch (error) {
+    log(`probe errored, treating state as stale (${error})`);
+    valid = false;
+  } finally {
+    await session.close();
+  }
+  return valid;
+};
+
 const login = async (statePath: string, entry: CredentialsEntry, headed: boolean, timeoutMs: number): Promise<boolean> => {
   let succeeded = false;
-  const browser = await launchBrowser(headed);
+  const session = createPlaywrightBrowserSession(headed);
   try {
-    const context: BrowserContext = await browser.newContext();
-    const page = await context.newPage();
+    await session.open();
     log(`logging in at ${entry.app_url}`);
-    await page.goto(entry.app_url, { waitUntil: "load", timeout: timeoutMs });
-    await fillLoginForm(page, entry, timeoutMs);
-    const appOrigin = new URL(entry.app_url).origin;
-    const loggedIn = await looksLoggedIn(page, appOrigin, timeoutMs);
+    await session.run(async (page) => {
+      await page.goto(entry.app_url, { waitUntil: "load", timeout: timeoutMs });
+      await fillLoginForm(page, entry, timeoutMs);
+    });
+    const observation = await session.observe(assertionFor(entry), timeoutMs);
+    const loggedIn = proofFromObservation(observation) === "signed-in";
     if (loggedIn) {
-      await page.waitForLoadState("networkidle", { timeout: 8000 }).catch(() => {});
       mkdirSync(dirname(statePath), { recursive: true });
-      await saveStateAtomic(context, statePath);
+      await session.capture(statePath);
       log(`wrote ${statePath}`);
       succeeded = true;
     } else {
@@ -251,7 +214,7 @@ const login = async (statePath: string, entry: CredentialsEntry, headed: boolean
   } catch (error) {
     log(`login failed (${error})`);
   } finally {
-    await browser.close();
+    await session.close();
   }
   return succeeded;
 };
