@@ -3,9 +3,15 @@
 import { parseArgs } from "node:util";
 import { existsSync, mkdirSync, readFileSync, renameSync, rmdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, dirname, resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { chromium } from "playwright";
 import type { Browser, BrowserContext, Page } from "playwright";
+import { normalizeAppKey, resolveAppKey } from "@account/app-key";
+import { canonicalJarPath, jarFileName } from "@jar/jar-path";
+import type { CredentialsEntry, CredentialsFile } from "@account/app-key";
+
+export { normalizeAppKey, resolveAppKey } from "@account/app-key";
+export { canonicalJarPath, jarFileName } from "@jar/jar-path";
 
 export const VERSION = "0.2.0";
 
@@ -50,44 +56,6 @@ EXIT CODES
   0 jar is valid (reused or refreshed) · 1 login failed · 2 bad usage
 `;
 
-export function normalizeAppKey(raw: string): string {
-  let key = raw.trim().toLowerCase();
-  const dot = key.indexOf(".");
-  if (dot > 0) {
-    key = key.slice(0, dot);
-  }
-  key = key.replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "");
-  if (key === "") {
-    key = "app";
-  }
-  return key;
-}
-
-export function jarFileName(app: string, purpose: string, namespace?: string): string {
-  let name = `${normalizeAppKey(app)}--${normalizeAppKey(purpose)}`;
-  if (namespace != null && namespace !== "") {
-    name = `${name}--${normalizeAppKey(namespace)}`;
-  }
-  return `${name}.json`;
-}
-
-export function canonicalJarPath(app: string, purpose: string, namespace?: string): string {
-  return `${homedir()}/.authstate/${jarFileName(app, purpose, namespace)}`;
-}
-
-type CredentialsEntry = {
-  purpose?: string;
-  email: string;
-  password: string;
-  app_url: string;
-};
-
-type CredentialsFile = {
-  app?: string;
-  default?: string;
-  credentials: Record<string, CredentialsEntry>;
-};
-
 const log = (message: string) => {
   console.error(`authstate: ${message}`);
 };
@@ -103,14 +71,6 @@ const expandHome = (path: string) => {
 const fail = (message: string, code: number): never => {
   log(message);
   process.exit(code);
-};
-
-export const resolveAppKey = (file: CredentialsFile, credentialsPath: string): string => {
-  let raw = file.app;
-  if (raw == null || raw === "") {
-    raw = basename(dirname(credentialsPath));
-  }
-  return normalizeAppKey(raw);
 };
 
 const resolveEntry = (file: CredentialsFile, purpose: string | undefined): { name: string; entry: CredentialsEntry } => {
