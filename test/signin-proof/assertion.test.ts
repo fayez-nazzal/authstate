@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 import { parseSignedInWhen } from "@signin-proof/assertion";
 
-const cli = join(import.meta.dir, "..", "..", "src", "cli.ts");
+const cli = join(import.meta.dir, "..", "..", "src", "main.ts");
 const fixture = join(import.meta.dir, "..", "fixtures", "no-assertion-app", ".testing-credentials.example.yaml");
 const jarPath = join(homedir(), ".authstate", "no-assertion-app--basic-user.json");
 

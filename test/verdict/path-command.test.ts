@@ -5,7 +5,7 @@ const fixture = join(import.meta.dir, "..", "fixtures", "example-app", ".testing
 
 test("authstate path writes exactly one parseable stdout line and nothing else", async () => {
   const proc = Bun.spawn({
-    cmd: ["bun", "run", join(import.meta.dir, "..", "..", "src", "cli.ts"), "path", "--credentials", fixture],
+    cmd: ["bun", "run", join(import.meta.dir, "..", "..", "src", "main.ts"), "path", "--credentials", fixture],
     stdout: "pipe",
     stderr: "pipe",
   });

@@ -3,7 +3,7 @@ import { writeFileSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const cli = join(import.meta.dir, "..", "..", "src", "cli.ts");
+const cli = join(import.meta.dir, "..", "..", "src", "main.ts");
 const exampleFixture = join(import.meta.dir, "..", "fixtures", "example-app", ".testing-credentials.example.yaml");
 
 test("--out exits 2 naming the removed flag", async () => {

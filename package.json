@@ -4,13 +4,13 @@
   "description": "Log in once and maintain a shared Playwright storageState cookie jar for browser tools.",
   "type": "module",
   "bin": {
-    "authstate": "src/cli.ts"
+    "authstate": "src/main.ts"
   },
   "files": [
     "src"
   ],
   "scripts": {
-    "start": "bun run src/cli.ts",
+    "start": "bun run src/main.ts",
     "test": "bun test"
   },
   "dependencies": {

@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { join } from "node:path";
 
-const cli = join(import.meta.dir, "..", "..", "src", "cli.ts");
+const cli = join(import.meta.dir, "..", "..", "src", "main.ts");
 const ambiguousFixture = join(import.meta.dir, "..", "fixtures", "ambiguous-app", ".testing-credentials.example.yaml");
 
 test("an ambiguous --purpose substring exits 4 and names both candidates, never picks one", async () => {

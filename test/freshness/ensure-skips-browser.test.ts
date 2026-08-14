@@ -3,7 +3,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-const cli = join(import.meta.dir, "..", "..", "src", "cli.ts");
+const cli = join(import.meta.dir, "..", "..", "src", "main.ts");
 const fixture = join(import.meta.dir, "..", "fixtures", "example-app", ".testing-credentials.example.yaml");
 const jarPath = join(homedir(), ".authstate", "example-app--basic-user.json");
 

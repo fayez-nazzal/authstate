@@ -38,6 +38,8 @@ credentials:
     email: basic-user@example.com
     password: replace-me
     app_url: http://localhost:3000
+    signed_in_when:
+      url_matches: "http://localhost:3000/dashboard/**"
 ```
 
 - `app` names the jar. It defaults to the folder holding the file.
@@ -71,16 +73,29 @@ authstate ensure --credentials .testing-credentials.yaml --force
 ```
 
 Watch the login in a real window, for an account that needs a code or a single
-sign on step.
+sign on step. This is the only command that opens a visible browser.
 
 ```bash
-authstate ensure --credentials .testing-credentials.yaml --headed
+authstate login --credentials .testing-credentials.yaml --headed
+```
+
+Delete one account's jar and lock.
+
+```bash
+authstate revoke --credentials .testing-credentials.yaml --purpose premium-user
+```
+
+Delete every jar under a credentials file that the expiry maths already
+proves dead.
+
+```bash
+authstate prune --credentials .testing-credentials.yaml
 ```
 
 Feed the path straight into another tool.
 
 ```bash
-STATE=$(authstate ensure --credentials .testing-credentials.yaml)
+STATE=$(authstate path --credentials .testing-credentials.yaml)
 some-browser-tool --storage-state "$STATE"
 ```
 
@@ -88,13 +103,34 @@ some-browser-tool --storage-state "$STATE"
 
 - `--credentials <path>` the credentials file. Required.
 - `--purpose <name>` which entry to use.
-- `--out <path>` write the jar somewhere other than `~/.authstate/`.
 - `--namespace <name>` a second separate session on the same account.
-- `--force` skip the validity check and log in now.
-- `--headed` show the browser window.
+- `--force` skip the freshness check and log in now.
+- `--verify` open a browser to confirm a jar the expiry maths already calls
+  fresh, instead of trusting it.
+- `--headed` show the browser window. Valid only on `authstate login`.
 - `--timeout <ms>` per step timeout. Default `20000`.
 
-Exit codes are `0` for a valid jar, `1` for a failed login, `2` for bad usage.
+`--out` was removed. It let a live bearer credential land anywhere and broke
+the one-jar-per-account rule; use `--namespace` for a second session on the
+same account instead.
+
+## Exit codes
+
+| code | meaning |
+| ---- | ------- |
+| 0 | usable |
+| 1 | credentials rejected |
+| 2 | usage error |
+| 3 | credentials file invalid or assertion missing |
+| 4 | no entry matches / ambiguous |
+| 5 | lock timeout |
+| 6 | human step required |
+| 7 | tool could not run |
+
+Each entry in the credentials file needs a `signed_in_when` block naming a
+`url_matches` glob and/or a `selector` that only appears once actually signed
+in. Without it `ensure` refuses with exit `3` and names the entry, instead of
+guessing from page content.
 
 ## Security
 
