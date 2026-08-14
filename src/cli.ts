@@ -17,6 +17,7 @@ import type { Result } from "@verdict/result";
 import { writeHumanReport } from "@verdict/human-report";
 import { parseCredentialsFile } from "@account/credentials-file";
 import { resolveEntry } from "@account/entry-resolution";
+import { parseSignedInWhen } from "@signin-proof/assertion";
 
 export { normalizeAppKey, resolveAppKey } from "@account/app-key";
 export { canonicalJarPath, jarFileName } from "@jar/jar-path";
@@ -131,10 +132,11 @@ const releaseLock = (lockDir: string) => {
   } catch {}
 };
 
-const assertionFor = (entry: CredentialsEntry): SignInAssertion => {
+const assertionFor = (entry: CredentialsEntry, entryName: string): SignInAssertion => {
+  const parsed = parseSignedInWhen(entry.signed_in_when, entryName);
   let assertion: SignInAssertion;
-  if (entry.signed_in_when) {
-    assertion = { urlMatches: entry.signed_in_when.url_matches, selector: entry.signed_in_when.selector };
+  if (parsed.ok) {
+    assertion = parsed.assertion;
   } else {
     assertion = { urlMatches: `${new URL(entry.app_url).origin}/**` };
   }
@@ -159,7 +161,7 @@ const fillLoginForm = async (page: Page, entry: CredentialsEntry, timeoutMs: num
   await submit.click();
 };
 
-const probeState = async (statePath: string, entry: CredentialsEntry, headed: boolean, timeoutMs: number): Promise<boolean> => {
+const probeState = async (statePath: string, entry: CredentialsEntry, entryName: string, headed: boolean, timeoutMs: number): Promise<boolean> => {
   let valid = false;
   const session = createPlaywrightBrowserSession(headed);
   try {
@@ -167,7 +169,7 @@ const probeState = async (statePath: string, entry: CredentialsEntry, headed: bo
     await session.run(async (page) => {
       await page.goto(entry.app_url, { waitUntil: "load", timeout: timeoutMs });
     });
-    const observation = await session.observe(assertionFor(entry), Math.min(timeoutMs, 10000));
+    const observation = await session.observe(assertionFor(entry, entryName), Math.min(timeoutMs, 10000));
     valid = proofFromObservation(observation) === "signed-in";
     if (valid) {
       await session.capture(statePath);
@@ -182,7 +184,7 @@ const probeState = async (statePath: string, entry: CredentialsEntry, headed: bo
   return valid;
 };
 
-const login = async (statePath: string, entry: CredentialsEntry, headed: boolean, timeoutMs: number): Promise<boolean> => {
+const login = async (statePath: string, entry: CredentialsEntry, entryName: string, headed: boolean, timeoutMs: number): Promise<boolean> => {
   let succeeded = false;
   const session = createPlaywrightBrowserSession(headed);
   try {
@@ -192,7 +194,7 @@ const login = async (statePath: string, entry: CredentialsEntry, headed: boolean
       await page.goto(entry.app_url, { waitUntil: "load", timeout: timeoutMs });
       await fillLoginForm(page, entry, timeoutMs);
     });
-    const observation = await session.observe(assertionFor(entry), timeoutMs);
+    const observation = await session.observe(assertionFor(entry, entryName), timeoutMs);
     const loggedIn = proofFromObservation(observation) === "signed-in";
     if (loggedIn) {
       mkdirSync(dirname(statePath), { recursive: true });
@@ -286,6 +288,11 @@ const main = async () => {
     process.exit(ExitCode.usable);
   }
 
+  const assertionResult = parseSignedInWhen(entry.signed_in_when, resolved.name);
+  if (!assertionResult.ok) {
+    fail(assertionResult.reason, ExitCode.credentialsFileInvalid);
+  }
+
   const lockDir = `${statePath}.lock`;
   const lockAcquired = await acquireLock(lockDir);
   if (!lockAcquired) {
@@ -297,7 +304,7 @@ const main = async () => {
     let needLogin = true;
     if (!values.force && existsSync(statePath)) {
       log(`probing existing state ${statePath}`);
-      const valid = await probeState(statePath, entry, values.headed as boolean, timeoutMs);
+      const valid = await probeState(statePath, entry, resolved.name, values.headed as boolean, timeoutMs);
       if (valid) {
         log("state is valid, reusing");
         needLogin = false;
@@ -306,7 +313,7 @@ const main = async () => {
       }
     }
     if (needLogin) {
-      const succeeded = await login(statePath, entry, values.headed as boolean, timeoutMs);
+      const succeeded = await login(statePath, entry, resolved.name, values.headed as boolean, timeoutMs);
       if (!succeeded) {
         exitCode = 1;
       }
