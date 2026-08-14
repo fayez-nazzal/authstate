@@ -6,17 +6,16 @@
     "strict": true,
     "skipLibCheck": true,
     "types": ["bun-types"],
-    "baseUrl": ".",
     "paths": {
-      "@account/*": ["src/account/*"],
-      "@jar/*": ["src/jar/*"],
-      "@freshness/*": ["src/freshness/*"],
-      "@login-turn/*": ["src/login-turn/*"],
-      "@signin-proof/*": ["src/signin-proof/*"],
-      "@login/*": ["src/login/*"],
-      "@verdict/*": ["src/verdict/*"],
-      "@ensure/*": ["src/ensure/*"],
-      "@invocation/*": ["src/invocation/*"]
+      "@account/*": ["./src/account/*"],
+      "@jar/*": ["./src/jar/*"],
+      "@freshness/*": ["./src/freshness/*"],
+      "@login-turn/*": ["./src/login-turn/*"],
+      "@signin-proof/*": ["./src/signin-proof/*"],
+      "@login/*": ["./src/login/*"],
+      "@verdict/*": ["./src/verdict/*"],
+      "@ensure/*": ["./src/ensure/*"],
+      "@invocation/*": ["./src/invocation/*"]
     }
   }
 }
