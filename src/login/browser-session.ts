@@ -1,6 +1,7 @@
 import { chromium } from "playwright";
 import type { Browser, BrowserContext, Page } from "playwright";
 import type { LoginStep } from "@login/login-plan";
+import { emailSelectors, passwordSelectors, submitSelectors } from "@login/field-locators";
 
 export type Observation =
   | { kind: "observed"; urlMatched: boolean; selectorMatched: boolean | null }
@@ -51,25 +52,61 @@ const observeAssertion = async (
   return observation;
 };
 
+const firstMatch = async (page: Page, selectors: string[]) => {
+  let found = null;
+  for (const selector of selectors) {
+    if (found === null) {
+      const candidate = page.locator(selector).first();
+      const matches = await candidate.count();
+      if (matches > 0) {
+        found = candidate;
+      }
+    }
+  }
+  return found;
+};
+
+const resolveField = async (page: Page, selectors: string[]) => {
+  const matched = await firstMatch(page, selectors);
+  let field = matched;
+  if (field === null) {
+    field = page.locator(selectors[0] as string).first();
+  }
+  return field;
+};
+
 const runLoginStep = async (page: Page, step: LoginStep, timeoutMs: number): Promise<void> => {
   if (step.kind === "goto") {
     await page.goto(step.url, { waitUntil: "load", timeout: timeoutMs });
   } else if (step.kind === "fill-email") {
-    let emailField = page.getByRole("textbox", { name: /email/i }).first();
-    const emailByRole = await emailField.count();
-    if (emailByRole === 0) {
-      emailField = page.locator("input[type='email']:visible, input[name*='email' i]:visible").first();
+    let emailField = null;
+    if (step.selector == null) {
+      const byRole = page.getByRole("textbox", { name: /email|username|user/i }).first();
+      const roleMatches = await byRole.count();
+      if (roleMatches > 0) {
+        emailField = byRole;
+      }
     }
+    if (emailField === null) {
+      emailField = await resolveField(page, emailSelectors(step.selector));
+    }
+    await emailField.waitFor({ state: "visible", timeout: timeoutMs });
     await emailField.fill(step.value);
   } else if (step.kind === "fill-password") {
-    const passwordField = page.locator("input[type='password']:visible").first();
+    const passwordField = await resolveField(page, passwordSelectors(step.selector));
     await passwordField.waitFor({ state: "visible", timeout: timeoutMs });
     await passwordField.fill(step.value);
   } else if (step.kind === "click-submit") {
-    let submit = page.getByRole("button", { name: /sign in|log in|login|sign-in/i }).first();
-    const submitByRole = await submit.count();
-    if (submitByRole === 0) {
-      submit = page.locator("button[type='submit']:visible, input[type='submit']:visible").first();
+    let submit = null;
+    if (step.selector == null) {
+      const byRole = page.getByRole("button", { name: /sign in|log in|login|sign-in/i }).first();
+      const roleMatches = await byRole.count();
+      if (roleMatches > 0) {
+        submit = byRole;
+      }
+    }
+    if (submit === null) {
+      submit = await resolveField(page, submitSelectors(step.selector));
     }
     await submit.click();
   }

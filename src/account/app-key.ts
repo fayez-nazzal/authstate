@@ -1,10 +1,12 @@
 import { basename, dirname } from "node:path";
+import type { FieldSelectors } from "@login/field-locators";
 
 export type CredentialsEntry = {
   purpose?: string;
   email: string;
   password: string;
   app_url: string;
+  fields?: FieldSelectors;
   signed_in_when?: {
     url_matches?: string;
     selector?: string;

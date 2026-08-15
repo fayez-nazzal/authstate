@@ -93,6 +93,18 @@ credentials:
 - `purpose` is free text. `--purpose` matches an entry key or any part of it.
 - `email`, `password` and `app_url` are required on every entry.
 - `signed_in_when` needs `url_matches`, or `selector`, or both. Without it a login refuses with exit code `3`.
+- `signed_in_when` must point at a page that reflects the session. A static landing page shows signed out text even with a live jar.
+- `fields` is optional. Add it when the sign in form is non standard and the built in detection misses it.
+
+```yaml
+    fields:
+      email: "input[name='username']"
+      password: "textarea[name='claims']"
+      submit: "button[type='submit']"
+```
+
+- Every key inside `fields` is optional. A selector you give wins over the built in detection. A key you leave out keeps the built in behaviour.
+- A `fields` value that is not a selector string refuses with exit code `3` and names the entry and the key.
 
 ## The smallest useful command
 

@@ -17,6 +17,8 @@ Read `README.md` for what every flag means. This file is about order, recipes an
 - Prefer `ensure` over `--force`. `ensure` reuses a live jar and opens no browser.
 - Use `--namespace` when you need a second session on the same account. `--out` was removed and now fails with exit code `2`.
 - Give the credentials file a `signed_in_when` block on every entry. Without it a run refuses with reason `assertion-missing` and exit code `3`.
+- Point `signed_in_when` at a page that changes when the session changes, never at a static landing page.
+- Add an optional `fields` block to an entry when the sign in form is non standard. See recipe 5.
 
 ## Recipes
 
@@ -85,6 +87,31 @@ slot_b=$(authstate ensure --credentials .testing-credentials.yaml --namespace sl
 
 Ran the `path` form of this. The jar file name gains the namespace, as in `demo-app--basic-user--slot-a.json`.
 
+### 5. Sign in to a non standard form
+
+Proves a login against a form the built in detection misses, such as `input[name='username']` and `textarea[name='claims']`.
+
+```yaml
+credentials:
+  mock-user:
+    purpose: local mock identity provider
+    email: user@example.com
+    password: replace-me
+    app_url: http://localhost:8990
+    fields:
+      email: "input[name='username']"
+      password: "textarea[name='claims']"
+      submit: "button[type='submit']"
+    signed_in_when:
+      url_matches: "http://localhost:8990/a/app**"
+```
+
+```bash
+jar=$(authstate ensure --credentials .testing-credentials.yaml --purpose mock-user 2>/dev/null | jq -r .path)
+```
+
+Every key inside `fields` is optional, and so is `fields` itself. A selector you give wins over the built in detection. Leave the block out and nothing changes.
+
 ## Reading the output
 
 `ensure`, `login` and `path` print exactly one JSON line on stdout. Every other byte goes to stderr.
@@ -132,6 +159,8 @@ Not every failure prints JSON. Failures caught before the run starts, such as a 
 | Exit `7` and `browser_launched` is `true` | the app at `app_url` is not listening, or the page never loaded | start the app, then retry |
 | The JSON says `"command":"ensure"` after you ran `login` | the envelope hardcodes `ensure` for both, see `baseResult` in `src/ensure/ensure-run.ts` | branch on `status` and `exit_code`, never on `command` |
 | `prune` deleted jars for an app you did not name | `prune` sweeps every dead jar in `~/.authstate/`, not just the one app | expect it to be global |
+| The jar is live but the page still shows signed out text | `signed_in_when` or your verification URL points at a static landing page, such as `/`, which never reflects the session | point both at a real in app page, such as `/a/app` |
+| The login fills the wrong box, or fills nothing | the form uses non standard names, such as `input[name='username']` or `textarea[name='claims']` | add a `fields` block to the entry, see recipe 5 |
 | A parallel run sits still for a while | callers collapse into one login through a lock folder beside the jar | let it wait. It gives up with exit `5` |
 
 ## Reporting

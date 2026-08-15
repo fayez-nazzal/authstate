@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import type { CredentialsEntry, CredentialsFile } from "@account/app-key";
+import { FIELD_KEYS } from "@login/field-locators";
 
 export type CredentialsFileResult =
   | { ok: true; file: CredentialsFile }
@@ -14,6 +15,41 @@ const isEntry = (value: unknown): value is CredentialsEntry => {
     typeof entry.password === "string" &&
     typeof entry.app_url === "string"
   );
+};
+
+const fieldsProblem = (name: string, entry: unknown): string | null => {
+  const record = entry as Record<string, unknown> | null;
+  let fields: unknown = undefined;
+  if (record != null && typeof record === "object") {
+    fields = record.fields;
+  }
+  let problem: string | null = null;
+  if (fields != null) {
+    if (typeof fields !== "object" || Array.isArray(fields)) {
+      problem = `entry "${name}": "fields" must be a map of selector strings`;
+    } else {
+      for (const [key, value] of Object.entries(fields as Record<string, unknown>)) {
+        if (problem === null && !FIELD_KEYS.includes(key as (typeof FIELD_KEYS)[number])) {
+          problem = `entry "${name}": unknown key "${key}" under "fields", expected one of ${FIELD_KEYS.join(", ")}`;
+        }
+        if (problem === null && typeof value !== "string") {
+          problem = `entry "${name}": "fields.${key}" must be a selector string`;
+        }
+      }
+    }
+  }
+  return problem;
+};
+
+const fieldsProblems = (credentialsMap: Record<string, unknown>): string[] => {
+  const problems: string[] = [];
+  for (const [name, entry] of Object.entries(credentialsMap)) {
+    const problem = fieldsProblem(name, entry);
+    if (problem !== null) {
+      problems.push(problem);
+    }
+  }
+  return problems;
 };
 
 const invalidEntryNames = (credentialsMap: Record<string, unknown>): string[] => {
@@ -36,8 +72,11 @@ const validateParsed = (path: string, parsed: unknown): CredentialsFileResult =>
     result = { ok: false, reason: `${path}: "credentials" must be a map of entries` };
   } else {
     const invalidNames = invalidEntryNames(credentialsMap);
+    const problems = fieldsProblems(credentialsMap);
     if (invalidNames.length > 0) {
       result = { ok: false, reason: `${path}: entries missing email/password/app_url: ${invalidNames.join(", ")}` };
+    } else if (problems.length > 0) {
+      result = { ok: false, reason: `${path}: ${problems.join("; ")}` };
     } else {
       result = { ok: true, file: file as CredentialsFile };
     }

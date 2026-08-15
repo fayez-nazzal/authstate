@@ -5,7 +5,7 @@ license: MIT
 compatibility: needs the `authstate` CLI and `jq` on PATH, plus Playwright Chromium and a `.testing-credentials.yaml` file in the repo
 metadata:
   author: Fayez Nazzal
-  version: "0.3.1"
+  version: "0.4.0"
 ---
 
 # authstate
@@ -76,5 +76,7 @@ Exit codes.
 - Never print jar contents, a cookie or a token. Pass the path along instead.
 - Prefer `ensure` over `--force`, and use `--namespace` rather than `--out`, which was removed and now exits `2`.
 - Never branch on the `command` field. It reads `ensure` even after a `login`.
+- Point `signed_in_when` at a page that reflects session state. A static landing page shows signed out text even with a valid jar, which reads as a broken login.
+- When a sign in form is non standard, set a `fields` block on the entry with `email`, `password` or `submit` CSS selectors instead of fighting the detection.
 
 Full recipes and pitfalls live in `AGENTS.md` in this repo.
