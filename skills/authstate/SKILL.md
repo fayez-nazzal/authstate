@@ -5,7 +5,7 @@ license: MIT
 compatibility: needs the `authstate` CLI and `jq` on PATH, plus Playwright Chromium and a `.testing-credentials.yaml` file in the repo
 metadata:
   author: Fayez Nazzal
-  version: "0.3.0"
+  version: "0.3.1"
 ---
 
 # authstate
