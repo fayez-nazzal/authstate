@@ -4,6 +4,8 @@
 
 Each account gets its own file, called a jar. Tools that share an account share one login. Tools on different accounts never block each other.
 
+It is built to be called by an AI coding agent, not typed by hand. Every run prints one JSON envelope on stdout and sends the human report to stderr, and every outcome maps to a named exit code. Agents should read [`AGENTS.md`](AGENTS.md) for the recipes, the output contract and the traps.
+
 ## Requirements
 
 - `bun` version 1.2 or newer.

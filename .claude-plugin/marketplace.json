@@ -1,0 +1,14 @@
+{
+  "name": "authstate-marketplace",
+  "owner": {
+    "name": "Fayez Nazzal",
+    "url": "https://github.com/fayez-nazzal"
+  },
+  "plugins": [
+    {
+      "name": "authstate",
+      "source": "./",
+      "description": "CLI for AI coding agents. Logs in once and maintains a shared Playwright storageState cookie jar so no other tool handles a password."
+    }
+  ]
+}

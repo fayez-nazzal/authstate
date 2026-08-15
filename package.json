@@ -1,7 +1,25 @@
 {
   "name": "authstate",
-  "version": "0.2.1",
-  "description": "Log in once and maintain a shared Playwright storageState cookie jar for browser tools.",
+  "version": "0.3.0",
+  "description": "CLI for AI coding agents. Logs in once and maintains a shared Playwright storageState cookie jar so no other tool handles a password.",
+  "keywords": [
+    "ai-agents",
+    "agent-tools",
+    "claude-code",
+    "codex",
+    "antigravity",
+    "grok-cli",
+    "cursor",
+    "opencode",
+    "agentic",
+    "cli",
+    "playwright",
+    "storagestate",
+    "authentication",
+    "login",
+    "session",
+    "cookie-jar"
+  ],
   "type": "module",
   "bin": {
     "authstate": "src/main.ts"

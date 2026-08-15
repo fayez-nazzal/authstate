@@ -1,0 +1,10 @@
+{
+  "name": "authstate",
+  "version": "0.3.0",
+  "description": "CLI for AI coding agents. Logs in once and maintains a shared Playwright storageState cookie jar so no other tool handles a password.",
+  "author": {
+    "name": "Fayez Nazzal"
+  },
+  "homepage": "https://github.com/fayez-nazzal/authstate",
+  "license": "MIT"
+}
