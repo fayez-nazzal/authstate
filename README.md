@@ -1,5 +1,7 @@
 # authstate
 
+[![CI](https://github.com/fayez-nazzal/authstate/actions/workflows/ci.yml/badge.svg)](https://github.com/fayez-nazzal/authstate/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 `authstate` logs in to a web app once and keeps the browser session on disk as a Playwright `storageState` file, so other tools never handle passwords.
 
 Each account gets its own file, called a jar. Tools that share an account share one login. Tools on different accounts never block each other.
@@ -19,6 +21,49 @@ bun link
 ```
 
 There is no build step. The `authstate` command runs `src/main.ts` straight from source.
+
+## Use it with your AI agent
+
+`authstate` is built to be driven by an AI coding agent rather than typed by hand. The bundled skill teaches your agent when to call it and how to read the JSON envelope it prints.
+
+One command sets it up.
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/fayez-nazzal/authstate/main/scripts/install-skill.sh | bash
+```
+
+It asks which agents to set up and defaults to Claude Code.
+
+For scripts and CI use the non-interactive form.
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/fayez-nazzal/authstate/main/scripts/install-skill.sh | bash -s -- --agents claude -y
+```
+
+- `--agents` accepts `claude`, `codex`, `cursor`, `opencode`, `grok`, `antigravity` or `all`.
+- `--scope user` installs for every project instead of just this one.
+
+### Claude Code plugin
+
+Claude Code users can instead install the whole repo as a plugin.
+
+```sh
+/plugin marketplace add fayez-nazzal/authstate
+/plugin install authstate
+```
+
+### Supported agents
+
+| Agent | Skill path |
+|---|---|
+| Claude Code | `.claude/skills/authstate/` |
+| OpenAI Codex CLI | `.agents/skills/authstate/` |
+| Cursor | `.cursor/skills/authstate/` |
+| opencode | `.opencode/skills/authstate/` |
+| xAI Grok CLI | `.grok/skills/authstate/` |
+| Google Antigravity | `.agents/skills/authstate/` |
+
+See [`AGENTS.md`](AGENTS.md) for the full recipes.
 
 ## Configure
 
@@ -144,6 +189,10 @@ A browser that cannot start, or an `app_url` with nothing listening, is a `brows
 bun test
 ```
 
+## Contributing
+
+See [`CONTRIBUTING.md`](CONTRIBUTING.md). Security reports go through [`SECURITY.md`](SECURITY.md).
+
 ## License
 
-MIT. See `LICENSE`.
+MIT. See [`LICENSE`](LICENSE).
